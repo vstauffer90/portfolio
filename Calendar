@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draggable Calendar</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        #draggable-area {
+            background: #f0f0f0;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 100px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .draggable {
+            background: #4CAF50;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: move;
+            user-select: none;
+            flex: 0 0 auto;
+        }
+
+        #calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            background: #ddd;
+            padding: 10px;
+        }
+
+        .day {
+            background: white;
+            min-height: 100px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            overflow: auto;
+        }
+
+        .day-header {
+            text-align: center;
+            background: #f0f0f0;
+            padding: 5px;
+            font-weight: bold;
+        }
+
+        .dropped-item {
+            background: #2196F3;
+            color: white;
+            padding: 5px;
+            margin: 2px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            word-wrap: break-word;
+            max-width: 100%;
+            cursor: move;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1976D2;
+        }
+
+        @media (max-width: 768px) {
+            .day {
+                min-height: 80px;
+            }
+            
+            .draggable, .dropped-item {
+                padding: 5px;
+                font-size: 0.7em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="draggable-area">
+            <div class="draggable" draggable="true">Victoria AWA</div>
+            <div class="draggable" draggable="true">Jasmine AWA</div>
+            <div class="draggable" draggable="true">Ivory AWA</div>
+            <div class="draggable" draggable="true">Rachel AWA</div>
+            <div class="draggable" draggable="true">Admin Ops Mtg- Team all onsite</div>
+        </div>
+
+        <div id="calendar-header">
+            <button id="prevMonth">Previous</button>
+            <h2 id="monthYear"></h2>
+            <button id="nextMonth">Next</button>
+        </div>
+
+        <div id="calendar"></div>
+    </div>
+
+    <script>
+        const calendar = document.getElementById('calendar');
+        const monthYear = document.getElementById('monthYear');
+        const prevMonth = document.getElementById('prevMonth');
+        const nextMonth = document.getElementById('nextMonth');
+        const draggableArea = document.getElementById('draggable-area');
+        let currentDate = new Date(2025, 2, 1);
+        let calendarData = loadCalendarData(); // Load saved data on initialization
+        let draggedElement = null;
+    
+        // Function to load data from localStorage
+        function loadCalendarData() {
+            const savedData = localStorage.getItem('calendarData');
+            return savedData ? JSON.parse(savedData) : {};
+        }
+    
+        // Function to save data to localStorage
+        function saveCalendarData() {
+            localStorage.setItem('calendarData', JSON.stringify(calendarData));
+        }
+    
+        function generateCalendar(date) {
+            calendar.innerHTML = '';
+            const year = date.getFullYear();
+            const month = date.getMonth();
+            
+            monthYear.textContent = date.toLocaleString('default', { 
+                month: 'long', 
+                year: 'numeric' 
+            });
+        
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            days.forEach(day => {
+                const dayHeader = document.createElement('div');
+                dayHeader.className = 'day-header';
+                dayHeader.textContent = day;
+                calendar.appendChild(dayHeader);
+            });
+        
+            const firstDayOfMonth = new Date(year, month, 1);
+            const firstDayIndex = firstDayOfMonth.getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+            for (let i = 0; i < firstDayIndex; i++) {
+                const emptyDay = document.createElement('div');
+                emptyDay.className = 'day';
+                emptyDay.style.background = '#f0f0f0';
+                calendar.appendChild(emptyDay);
+            }
+        
+            for (let i = 1; i <= daysInMonth; i++) {
+                const day = document.createElement('div');
+                day.className = 'day';
+                day.innerHTML = `<div>${i}</div>`;
+                day.dataset.date = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                
+                const dateKey = day.dataset.date;
+                if (calendarData[dateKey]) {
+                    calendarData[dateKey].forEach(itemText => {
+                        const droppedItem = createDroppedItem(itemText);
+                        day.appendChild(droppedItem);
+                    });
+                }
+        
+                day.addEventListener('dragover', (e) => e.preventDefault());
+                day.addEventListener('drop', handleDrop);
+                calendar.appendChild(day);
+            }
+        
+            const totalCells = firstDayIndex + daysInMonth;
+            const remainingCells = (7 - (totalCells % 7)) % 7;
+            for (let i = 0; i < remainingCells; i++) {
+                const emptyDay = document.createElement('div');
+                emptyDay.className = 'day';
+                emptyDay.style.background = '#f0f0f0';
+                calendar.appendChild(emptyDay);
+            }
+        }
+        
+        function createDroppedItem(text) {
+            const droppedItem = document.createElement('div');
+            droppedItem.className = 'dropped-item';
+            droppedItem.textContent = text;
+            droppedItem.draggable = true;
+            droppedItem.addEventListener('dragstart', handleDragStart);
+            droppedItem.addEventListener('dragend', handleDragEnd);
+            return droppedItem;
+        }
+        
+        function handleDragStart(e) {
+            draggedElement = e.target;
+            e.dataTransfer.setData('text/plain', e.target.textContent);
+            e.target.classList.add('dragging');
+        }
+        
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            draggedElement = null;
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            const data = e.dataTransfer.getData('text/plain');
+            const targetDay = e.target.classList.contains('day') ? e.target : e.target.closest('.day');
+            if (!targetDay) return;
+            
+            const targetDate = targetDay.dataset.date;
+            
+            // Check if item already exists in target day
+            const existingItems = targetDay.querySelectorAll('.dropped-item');
+            for (let item of existingItems) {
+                if (item.textContent === data) return;
+            }
+            
+            // If dragged from another day, remove it from the original location
+            if (draggedElement.classList.contains('dropped-item')) {
+                const originalDay = draggedElement.closest('.day');
+                if (originalDay && originalDay.dataset.date !== targetDate) {
+                    const originalDate = originalDay.dataset.date;
+                    draggedElement.remove();
+                    if (calendarData[originalDate]) {
+                        calendarData[originalDate] = calendarData[originalDate].filter(item => item !== data);
+                        if (calendarData[originalDate].length === 0) delete calendarData[originalDate];
+                    }
+                }
+            }
+            
+            // Add to new location
+            const droppedItem = createDroppedItem(data);
+            targetDay.appendChild(droppedItem);
+            
+            if (!calendarData[targetDate]) calendarData[targetDate] = [];
+            if (!calendarData[targetDate].includes(data)) calendarData[targetDate].push(data);
+            
+            saveCalendarData(); // Save after modification
+        }
+        
+        function handleDraggableAreaDrop(e) {
+            e.preventDefault();
+            const data = e.dataTransfer.getData('text/plain');
+            
+            if (draggedElement && draggedElement.classList.contains('dropped-item')) {
+                const originalDay = draggedElement.closest('.day');
+                if (originalDay) {
+                    const originalDate = originalDay.dataset.date;
+                    draggedElement.remove();
+                    if (calendarData[originalDate]) {
+                        calendarData[originalDate] = calendarData[originalDate].filter(item => item !== data);
+                        if (calendarData[originalDate].length === 0) delete calendarData[originalDate];
+                    }
+                    saveCalendarData(); // Save after modification
+                }
+            }
+        }
+        
+        const draggableItems = document.querySelectorAll('.draggable');
+        draggableItems.forEach(item => {
+            item.addEventListener('dragstart', handleDragStart);
+            item.addEventListener('dragend', handleDragEnd);
+        });
+        
+        draggableArea.addEventListener('dragover', (e) => e.preventDefault());
+        draggableArea.addEventListener('drop', handleDraggableAreaDrop);
+        
+        prevMonth.addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            generateCalendar(currentDate);
+        });
+        
+        nextMonth.addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            generateCalendar(currentDate);
+        });
+        
+        generateCalendar(currentDate);
+    </script>
+</body>
+</html>
